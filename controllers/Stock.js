@@ -1,6 +1,6 @@
 const Stock = require('../models/Stock');
 const StockCount = require('../models/StockCount');
-const Product = require('../models/product');
+const Product = require('../models/Product');
 
 exports.addStock = async (req, res) => {
   const { productId, quantity } = req.body;
