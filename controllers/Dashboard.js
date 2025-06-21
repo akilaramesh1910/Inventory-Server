@@ -67,24 +67,31 @@ exports.getStats = async (req, res) => {
         const productsChangeStr = calculateChangeString(productsAddedLastPeriod, totalProducts);
         const usersChangeStr = calculateChangeString(usersRegisteredLastPeriod, totalUsers);
 
-        const lowStockThreshold = 10; 
-        const lowStockItems = await Stock.countDocuments({ quantity: { $lt: lowStockThreshold } });
+        const lowStockItemsResult = await Product.aggregate([
+            {
+                $lookup: {
+                    from: 'stocks',
+                    localField: '_id',
+                    foreignField: 'productId',
+                    as: 'stockInfo'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$stockInfo',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $addFields: { quantity: { $ifNull: ['$stockInfo.quantity', 0] } }
+            },
+            { $match: { quantity: 0 } },
+            { $count: 'count' }
+        ]);
+
+        const lowStockItems = lowStockItemsResult.length > 0 ? lowStockItemsResult[0].count : 0;
 
         const stats = [
-            {
-                title: "Total Revenue",
-                value: formatCurrency(allTimeTotalRevenue),
-                change: revenueChangeStr,
-                iconKey: "DollarSign",
-                color: "emerald",
-                progress: (() => {
-                    if (monthlyRevenueTarget === 0) {
-                        return 0; 
-                    }
-                    const rawProgress = (revenueLastPeriod / monthlyRevenueTarget) * 100;
-                    return parseFloat(Math.min(rawProgress, 100).toFixed(2));
-                })(),
-            },
             {
                 title: "Total Revenue",
                 value: formatCurrency(allTimeTotalRevenue),
@@ -128,23 +135,9 @@ exports.getStats = async (req, res) => {
                 })(),
             },
             {
-                title: "Total Customers",
-                value: totalUsers.toString(),
-                change: usersChangeStr, 
-                iconKey: "Users",
-                color: "slate",
-                progress: (() => {
-                    if (monthlyUserTarget === 0) {
-                        return 0;
-                    }
-                    const rawProgress = (usersRegisteredLastPeriod / monthlyUserTarget) * 100;
-                    return parseFloat(Math.min(rawProgress, 100).toFixed(2));
-                })(),
-            },
-            {
                 title: "Low Stock Items",
                 value: lowStockItems.toString(),
-                change: `Threshold < ${lowStockThreshold}`,
+                change: "Items at zero stock",
                 iconKey: "AlertTriangle",
                 color: "red",
                 progress: lowStockItems > 0 ? 100 : 0,
